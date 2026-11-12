@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Famille 🎉</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;min-height:100vh;color:#fff;
+  background:linear-gradient(-45deg,#ff6ec4,#7873f5,#4ade80,#facc15);
+  background-size:400% 400%;animation:bg 12s ease infinite;overflow-x:hidden}
+@keyframes bg{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.float{position:fixed;font-size:2rem;opacity:.5;animation:fly linear infinite;pointer-events:none;z-index:0}
+@keyframes fly{from{transform:translateY(110vh) rotate(0)}to{transform:translateY(-15vh) rotate(360deg)}}
+.screen{position:relative;z-index:1;max-width:520px;margin:auto;padding:20px;min-height:100vh;
+  display:none;flex-direction:column;justify-content:center;gap:16px;text-align:center}
+.screen.active{display:flex}
+h1{font-size:2.3rem;text-shadow:0 4px 0 rgba(0,0,0,.2);animation:pulse 2s infinite}
+@keyframes pulse{50%{transform:scale(1.05)}}
+.card{background:rgba(255,255,255,.22);backdrop-filter:blur(6px);border-radius:24px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+input,select{width:100%;padding:14px;border-radius:14px;border:none;font-size:1.1rem;margin-bottom:10px}
+button{cursor:pointer;border:none;border-radius:16px;padding:14px 18px;font-size:1.05rem;font-weight:700;
+  color:#222;background:#fff;box-shadow:0 5px 0 #ccc;transition:transform .1s}
+button:active{transform:translateY(4px);box-shadow:0 1px 0 #ccc}
+.btn-main{background:#ffd23f;box-shadow:0 5px 0 #d4a500;width:100%}
+.answers{display:grid;gap:12px}
+.answer{text-align:left}
+.answer.good{background:#4ade80;animation:shake .5s}
+.answer.bad{background:#f87171}
+@keyframes shake{0%,100%{transform:none}25%{transform:rotate(-2deg)}75%{transform:rotate(2deg)}}
+.timer{height:12px;background:rgba(255,255,255,.3);border-radius:10px;overflow:hidden}
+.timer div{height:100%;width:100%;background:#ffd23f;transition:width 1s linear}
+.big{font-size:4rem;animation:bounce 1s infinite}
+@keyframes bounce{50%{transform:translateY(-15px)}}
+.confetti{position:fixed;top:-30px;font-size:1.6rem;animation:fall 2.5s linear forwards;z-index:5;pointer-events:none}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+.tag{display:inline-block;background:#fff;color:#333;padding:6px 12px;border-radius:20px;margin:4px;font-weight:600}
+.score-row{display:flex;justify-content:space-between;background:rgba(255,255,255,.25);padding:12px 16px;border-radius:14px;font-size:1.2rem}
+.small{font-size:.95rem;opacity:.95;min-height:1.4em}
+</style>
+</head>
+<body>
+
+<!-- ÉCRAN 1 : ACCUEIL -->
+<div class="screen active" id="start">
+  <div class="big">🎉</div>
+  <h1>Quiz Famille</h1>
+  <div class="card">
+    <input id="pname" placeholder="Prénom du joueur" maxlength="15">
+    <button onclick="addPlayer()" style="width:100%">➕ Ajouter le joueur</button>
+    <div id="plist" style="margin-top:12px;min-height:30px"></div>
+  </div>
+  <div class="card">
+    <label>Nombre de questions :</label>
+    <select id="nb" style="margin-top:8px">
+      <option value="10">10 questions</option>
+      <option value="20" selected>20 questions</option>
+      <option value="30">30 questions</option>
+      <option value="0">Toutes !</option>
+    </select>
+    <button class="btn-main" onclick="startGame()">🚀 C'est parti !</button>
+  </div>
+</div>
+
+<!-- ÉCRAN 2 : JEU -->
+<div class="screen" id="game">
+  <div id="turn" style="font-size:1.4rem;font-weight:700"></div>
+  <div id="prog" class="small"></div>
+  <div class="timer"><div id="bar"></div></div>
+  <div class="card">
+    <div id="cat" style="font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px"></div>
+    <div id="qtext" style="font-size:1.35rem;font-weight:700;line-height:1.4"></div>
+  </div>
+  <div class="answers" id="answers"></div>
+  <div id="feedback" style="font-size:1.2rem;font-weight:700;min-height:1.5em"></div>
+  <div id="fun" class="small"></div>
+  <button id="next" class="btn-main" style="display:none" onclick="next()">Suivant ➡️</button>
+  <div id="live"></div>
+</div>
+
+<!-- ÉCRAN 3 : FIN -->
+<div class="screen" id="end">
+  <div class="big">🏆</div>
+  <h1>Fin de partie !</h1>
+  <div class="card" id="winner" style="font-size:1.3rem;font-weight:700"></div>
+  <div class="card" id="board" style="display:grid;gap:10px"></div>
+  <button class="btn-main" onclick="show('start')">🔁 Rejouer</button>
+</div>
+
+<script>
+// Format : [catégorie, question, [4 réponses], index de la bonne réponse (0 à 3), anecdote]
+const Q = [
+["Géo","Quelle est la capitale de l'Australie ?",["Sydney","Melbourne","Canberra","Perth"],2,"Beaucoup pensent Sydney, mais c'est Canberra !"],
+["Géo","Quel est le plus grand océan du monde ?",["Atlantique","Indien","Arctique","Pacifique"],3,"Il couvre plus d'un tiers de la surface de la Terre."],
+["Géo","Quel pays a la forme d'une botte ?",["Espagne","Grèce","Italie","Portugal"],2,"La botte a même son talon et sa pointe !"],
+["Géo","Combien de continents compte-t-on (modèle le plus courant) ?",["5","6","7","8"],2,"Certains en comptent 5, d'autres 6 ou 7 selon le modèle."],
+["Géo","Quelle est la plus haute montagne du monde ?",["K2","Mont Blanc","Everest","Kilimandjaro"],2,"L'Everest culmine à environ 8 849 m."],
+["Géo","Quel est le plus petit pays du monde ?",["Monaco","Vatican","Saint-Marin","Liechtenstein"],1,"Il fait à peine 0,44 km²."],
+["Géo","Quelle est la capitale du Canada ?",["Toronto","Montréal","Ottawa","Vancouver"],2,"Toronto est plus grande, mais Ottawa est la capitale."],
+["Géo","Quel est le plus grand désert chaud du monde ?",["Gobi","Kalahari","Sahara","Atacama"],2,"Le Sahara est plus grand que les États-Unis !"],
+["Histoire","En quelle année a eu lieu la prise de la Bastille ?",["1689","1789","1889","1989"],1,"Le 14 juillet 1789 !"],
+["Histoire","Qui fut le premier homme à marcher sur la Lune ?",["Buzz Aldrin","Youri Gagarine","Neil Armstrong","Michael Collins"],2,"« Un petit pas pour l'homme... »"],
+["Histoire","En quelle année le premier pas sur la Lune a-t-il eu lieu ?",["1959","1969","1979","1989"],1,"Le 20 juillet 1969."],
+["Histoire","Quel empereur s'est sacré lui-même en 1804 ?",["Louis XIV","Napoléon Ier","Charlemagne","Napoléon III"],1,"Il a pris la couronne des mains du pape... et se l'est mise tout seul !"],
+["Histoire","Qui a écrit « Les Misérables » ?",["Émile Zola","Victor Hugo","Balzac","Molière"],1,"Le roman est paru en 1862."],
+["Histoire","Quelle civilisation a construit les pyramides de Gizeh ?",["Romaine","Grecque","Égyptienne","Maya"],2,"Elles ont plus de 4 500 ans !"],
+["Sciences","Quelle planète est surnommée la planète rouge ?",["Vénus","Mars","Jupiter","Saturne"],1,"Sa couleur vient de l'oxyde de fer présent dans son sol."],
+["Sciences","Combien d'os compte le corps humain adulte ?",["106","206","306","406"],1,"Un bébé en a environ 300 à la naissance !"],
+["Sciences","Quel est le symbole chimique de l'or ?",["Or","Ag","Au","Gd"],2,"« Au » vient du latin aurum."],
+["Sciences","De quel gaz l'air est-il principalement composé ?",["Oxygène","Azote","Hydrogène","Dioxyde de carbone"],1,"L'azote représente environ 78 % de l'air."],
+["Sciences","Quel est l'animal terrestre le plus rapide ?",["Lion","Guépard","Antilope","Lévrier"],1,"Il peut atteindre plus de 100 km/h en courte course."],
+["Sciences","Combien de cœurs possède une pieuvre ?",["1","2","3","8"],2,"Trois cœurs, dont deux pour les branchies !"],
+["Sciences","Quel est le plus long os du corps humain ?",["Tibia","Humérus","Fémur","Colonne vertébrale"],2,"Le fémur, situé dans la cuisse."],
+["Sciences","Quel est le plus grand organe du corps humain ?",["Le foie","Le cerveau","La peau","Le poumon"],2,"La peau pèse environ 4 kg chez un adulte."],
+["Sciences","Quel instrument sert à mesurer la température ?",["Thermomètre","Baromètre","Hygromètre","Boussole"],0,"Le baromètre, lui, mesure la pression."],
+["Sciences","Combien de minutes contient une heure et demie ?",["60","90","100","120"],1,"30 minutes de plus qu'une heure."],
+["Cinéma","Qui a réalisé Titanic ?",["Steven Spielberg","James Cameron","Ridley Scott","Christopher Nolan"],1,"Le film a remporté 11 Oscars."],
+["Cinéma","Dans Le Roi Lion, quel est le nom du père de Simba ?",["Scar","Mufasa","Timon","Rafiki"],1,"Scar, son oncle, est le grand méchant."],
+["Cinéma","Quel est le nom de la chouette de Harry Potter ?",["Hedwige","Errol","Hermès","Pigwidgeon"],0,"Elle livre le courrier des élèves de Poudlard."],
+["Cinéma","Dans quel film Pixar rencontre-t-on le petit poisson Nemo ?",["Toy Story","Le Monde de Nemo","Monstres et Cie","Cars"],1,"Le film est sorti en 2003."],
+["Cinéma","Qui chante « Thriller » ?",["Prince","Michael Jackson","Elvis Presley","Stevie Wonder"],1,"C'est l'album le plus vendu de l'histoire."],
+["Musique","Combien de touches compte un piano ?",["66","76","88","100"],2,"52 blanches et 36 noires."],
+["Musique","Combien de cordes possède une guitare classique ?",["4","5","6","8"],2,"Six cordes, comme la guitare électrique standard."],
+["Sport","Combien de joueurs par équipe sont sur le terrain au football ?",["9","10","11","12"],2,"10 joueurs de champ et un gardien."],
+["Sport","Dans quel sport marque-t-on des « paniers » ?",["Handball","Basket","Rugby","Volley"],1,"Le panier mesure 3,05 m de haut."],
+["Sport","Quelle ville a accueilli les JO d'été de 2024 ?",["Tokyo","Londres","Paris","Los Angeles"],2,"Les JO de Paris 2024 !"],
+["Sport","Combien vaut un essai au rugby (hors transformation) ?",["3","4","5","7"],2,"Depuis 2020, un essai vaut 5 points."],
+["Sport","Quel pays a gagné la Coupe du monde de football 2018 ?",["Allemagne","France","Brésil","Croatie"],1,"Les Bleus sont champions du monde à Moscou !"],
+["Animaux","Quel est le plus grand animal terrestre ?",["La girafe","L'éléphant d'Afrique","Le rhinocéros","L'hippopotame"],1,"Il peut peser jusqu'à 6 tonnes."],
+["Animaux","Combien de pattes possède une araignée ?",["6","8","10","4"],1,"Les insectes, eux, en ont six."],
+["Animaux","Quel est le seul mammifère capable de voler ?",["La chauve-souris","L'écureuil volant","Le pingouin","Le colibri"],0,"Le colibri, lui, est un oiseau."],
+["Animaux","Quel est le plus grand oiseau du monde ?",["L'autruche","L'émeu","Le nandou","Le manchot empereur"],0,"Elle peut mesurer plus de 2 m de haut."],
+["Animaux","Quel animal peut dormir debout ?",["Le cheval","L'ours","Le chat","Le chien"],0,"Grâce à un système de verrouillage des genoux."],
+["Français","Combien de lettres compte l'alphabet français ?",["24","25","26","28"],2,"Les mêmes que l'alphabet latin de base."],
+["Français","Quel est le pluriel de « un cheval » ?",["Des chevals","Des chevaux","Des chevaus","Des chevau"],1,"Les mots en « -al » font souvent « -aux »."],
+["Français","Quelle est la langue la plus parlée au monde en nombre de locuteurs natifs ?",["Anglais","Mandarin","Espagnol","Hindi"],1,"Le mandarin, avec plus d'un milliard de locuteurs."],
+["Français","Quelle est la monnaie du Japon ?",["Le yuan","Le won","Le yen","Le baht"],2,"Le yen !"],
+["Culture","Qui a popularisé l'ampoule électrique ?",["Edison","Tesla","Bell","Pasteur"],0,"Il a déposé plus de 1 000 brevets."],
+["Culture","Quel super-héros se cache derrière Bruce Wayne ?",["Superman","Batman","Spider-Man","Flash"],1,"Son père était médecin à Gotham."],
+["Culture","Avec quel fruit prépare-t-on du guacamole ?",["La mangue","L'avocat","La papaye","Le kiwi"],1,"Le mot vient de l'aztèque « ahuacatl »."],
+["Culture","Combien de côtés a un hexagone ?",["5","6","7","8"],1,"Hexa = six en grec."],
+["Culture","Quel est le symbole de la paix chez les Japonais ?",["La grue en origami","Le bambou","Le cerisier","Le dragon"],0,"Plier 1 000 grues porte chance, selon la légende."]
+].map(([c,q,a,r,f])=>({c,q,a,r,f}));
+
+const EMOJIS=['🎉','⭐','🌈','🦄','🍕','🚀','🎈','🏆','🔥','💎'];
+let players=[],queue=[],idx=0,scores={},timer=null,timeLeft=15,answered=false,current=null;
+
+// Émojis flottants en arrière-plan
+for(let i=0;i<14;i++){
+  const e=document.createElement('div');
+  e.className='float';
+  e.textContent=EMOJIS[i%EMOJIS.length];
+  e.style.left=Math.random()*100+'vw';
+  e.style.animationDuration=(10+Math.random()*12)+'s';
+  e.style.animationDelay=(-Math.random()*20)+'s';
+  document.body.appendChild(e);
+}
+
+const $=id=>document.getElementById(id);
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+
+function addPlayer(){
+  const v=$('pname').value.trim();
+  if(!v||players.includes(v)||players.length>=8)return;
+  players.push(v);
+  $('pname').value='';
+  renderPlayers();
+}
+function renderPlayers(){
+  $('plist').innerHTML=players.map(p=>`<span class="tag">${p}</span>`).join('')||'<i>Ajoutez au moins un joueur</i>';
+}
+$('pname').addEventListener('keydown',e=>{if(e.key==='Enter')addPlayer();});
+
+function startGame(){
+  if(!players.length){alert("Ajoutez au moins un joueur !");return;}
+  const n=+$('nb').value||Q.length;
+  queue=shuffle([...Q]).slice(0,n);
+  idx=0;
+  scores={};
+  players.forEach(p=>scores[p]=0);
+  show('game');
+  nextQ();
+}
+
+function nextQ(){
+  if(idx>=queue.length)return endGame();
+  const q=queue[idx];
+  const order=shuffle([0,1,2,3]);
+  current={c:q.c,q:q.q,f:q.f,choices:order.map(i=>q.a[i]),correct:order.indexOf(q.r)};
+  answered=false;
+  const p=players[idx%players.length];
+  $('turn').textContent=`🎯 À ${p} de jouer !`;
+  $('prog').textContent=`Question ${idx+1} / ${queue.length}`;
+  $('cat').textContent=current.c;
+  $('qtext').textContent=current.q;
+  $('feedback').textContent='';
+  $('fun').textContent='';
+  $('next').style.display='none';
+  $('answers').innerHTML=current.choices.map((c,i)=>
+    `<button class="answer" onclick="answer(${i})">${String.fromCharCode(65+i)}. ${c}</button>`).join('');
+  $('live').innerHTML=players.map(pl=>`<span class="tag">${pl} : ${scores[pl]}</span>`).join('');
+  startTimer();
+}
+
+function startTimer(){
+  clearInterval(timer);
+  timeLeft=15;
+  $('bar').style.width='100%';
+  timer=setInterval(()=>{
+    timeLeft--;
+    $('bar').style.width=(timeLeft/15*100)+'%';
+    if(timeLeft<=0){
+      clearInterval(timer);
+      if(!answered)answer(-1);
+    }
+  },1000);
+}
+
+function answer(i){
+  if(answered)return;
+  answered=true;
+  clearInterval(timer);
+  const p=players[idx%players.length];
+  const btns=document.querySelectorAll('.answer');
+  btns[current.correct].classList.add('good');
+  const bonne=current.choices[current.correct];
+  if(i===current.correct){
+    scores[p]++;
+    $('feedback').textContent=`✅ Bravo ${p} ! +1 point`;
+    confetti(40);
+  }else{
+    if(i>=0)btns[i].classList.add('bad');
+    $('feedback').textContent=i<0
+      ? `⏰ Temps écoulé ! Réponse : ${bonne}`
+      : `❌ Raté ${p} ! Réponse : ${bonne}`;
+  }
+  $('fun').textContent='💡 '+current.f;
+  $('live').innerHTML=players.map(pl=>`<span class="tag">${pl} : ${scores[pl]}</span>`).join('');
+  $('next').style.display='block';
+}
+
+function next(){
+  idx++;
+  nextQ();
+}
+
+function endGame(){
+  show('end');
+  const ranking=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const top=ranking[0][1];
+  const winners=ranking.filter(r=>r[1]===top).map(r=>r[0]);
+  $('winner').textContent=`🏆 ${winners.join(' et ')} ${winners.length>1?'sont vainqueurs !':'est le champion !'}`;
+  $('board').innerHTML=ranking.map(([p,s],i)=>
+    `<div class="score-row"><span>${['🥇','🥈','🥉'][i]||'🎈'} ${p}</span><b>${s} pt${s>1?'s':''}</b></div>`).join('');
+  for(let i=0;i<60;i++)setTimeout(()=>confetti(1),i*60);
+}
+
+function confetti(n){
+  for(let i=0;i<n;i++){
+    const c=document.createElement('div');
+    c.className='confetti';
+    c.textContent=EMOJIS[Math.floor(Math.random()*EMOJIS.length)];
+    c.style.left=Math.random()*100+'vw';
+    document.body.appendChild(c);
+    setTimeout(()=>c.remove(),2600);
+  }
+}
+</script>
+</body>
+</html>
